@@ -1,28 +1,18 @@
 
 
 from nacl.signing import SigningKey
-from nacl import bindings
 import json
 import io
 
-from objective_sodium import Scalar,Ed25519 as cv, int_encode, int_decode
-
+from objective_sodium import  Scalar,Ed25519 as cv, int_encode, int_decode
 
 import hashlib
 from hmac import compare_digest
 def sha512(m):return hashlib.sha512(m).digest()
 def h_int(m):return Scalar.from_long_bytes(sha512(m))
-def hash_to_point(seed):
-    data=sha512(seed)[:32]
-    X=cv.decode_point(data)
-    X=X+X;X=X+X;X=X+X
-    return X
-
-for i in range(100):pass
 
 
-
-def verify(com,x,r):
+def verify(sig,pk,m):
     "verifies an Ed25519 signature, same as the usual NACL signing API"
     assert len(sig)==64
     R = cv.Point(sig[0:32])
