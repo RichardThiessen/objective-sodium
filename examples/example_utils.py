@@ -70,8 +70,8 @@ def chameleon_raw(Y,m,r=None):
 #unless space is a big concern (64 vs 32 bytes) this makes things a lot easier
 
 def forge(priv_key,m,H,salt=b""):
-    #produce r for an (m,h) pair given private key
-    #salt randomises process but is not required
+    """produce r for an (m,h) pair given private key
+    salt randomises the process but is not required"""
     
     #handle packed H
     h=H #default case, if unpacked h supplied

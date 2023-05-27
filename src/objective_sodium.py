@@ -24,7 +24,13 @@ from nacl.bindings.crypto_scalarmult import (
     crypto_scalarmult_base,
     crypto_scalarmult)
 
+import nacl.signing
+import nacl.public
+
 if not has_crypto_core_ed25519:raise ImportError
+
+import hashlib
+def sha512(priv_key):return hashlib.sha512(priv_key).digest()
 
 def int_decode(s):
     return sum(256**i * b for i,b in enumerate(bytearray(s)))
@@ -35,6 +41,12 @@ def int_encode(x,n):
 class Scalar():
     """represents a curve25519 or ed25519 scalar
     constant time arithmetic operations
+    
+    Can be constructed from:
+    - bytes[32]
+    - integer
+    - nacl.signing.SigningKey
+    - nacl.public.PrivateKey
     """
     SCALARBYTES=crypto_core_ed25519_SCALARBYTES
     NONREDUCEDSCALARBYTES=crypto_core_ed25519_NONREDUCEDSCALARBYTES
@@ -56,6 +68,14 @@ class Scalar():
         elif type(x)==bytes:
             assert len(x)==self.SCALARBYTES
             self.bytes=reduced=self._reduce(x)
+        elif isinstance(x, nacl.signing.SigningKey):
+            #calculate secret scalar from signing key
+            x=sha512(x.encode())[:32]
+            self.bytes=self.decode_scalar_25519(x).bytes
+        elif isinstance(x,nacl.public.PrivateKey):
+            #C25519 keys objects just store scalar not the seed
+            #scalar bytes aren't clamped though, so use the decode_scalar function to do that.
+            self.bytes=self.decode_scalar_25519(x.encode()).bytes
         else:
             raise TypeError("Scalar must be created from bytes or int")
         if not allow_nonreduced and reduced!=x:
@@ -97,6 +117,26 @@ class Scalar():
             compare_digest(self.bytes,o))
         #use compare digest to avoid timing side channel
         #return isinstance(other,Scalar) and compare_digest(self.bytes,other.bytes)
+    @classmethod
+    def decode_scalar_25519(cls,data):
+        """ decode scalar according to RF7748 and draft-irtf-cfrg-eddsa
+
+        Args:
+               k (bytes) : scalar to decode
+
+        Returns:
+              Scalar: decoded scalar
+        """
+        assert isinstance(data, bytes)
+        k = bytearray(data)
+        k[0]  &= 0xF8
+        k[31] = (k[31] &0x7F) | 0x40
+        k = bytes(k)
+        S=Scalar(k)
+        S.bytes=k
+        return S
+        return Scalar(k)
+Scalar.zero=Scalar(0)
 
 
 class Point_c25519():
@@ -113,6 +153,8 @@ class Point_c25519():
         assert isinstance(inst,cls)
         return bytes(inst)
     def __init__(self,x):
+        if isinstance(x, nacl.public.PublicKey):
+            x=x.encode()
         self.bytes=bytes(x)
         assert len(self.bytes)==self.ed25519_BYTES
     def __repr__(self):
@@ -139,6 +181,13 @@ class Point_c25519():
 class Point_ed25519(Point_c25519):
     "represents an ed25519 curve point"
     def is_on_curve(self):return crypto_core_ed25519_is_valid_point(self.bytes)
+    def __init__(self,x):
+        if isinstance(x, nacl.signing.VerifyKey):
+            x=x.encode()
+        self.bytes=bytes(x)
+        if not self.is_on_curve():
+            raise ValueError("point is not on curve")
+        assert len(self.bytes)==self.ed25519_BYTES
     #add/sub implemented for ed25519
     def __add__(self,other):
         assert isinstance(other,Point_ed25519)
@@ -163,9 +212,10 @@ class Curve25519():
         def __repr__(self):
             return "%s(%r)"%(Point_c25519.__name__,self.bytes)
         def __mul__(self,other):
+            if other == Scalar.zero:raise ValueError("can't handle point at infinity")
             return Scalar._tryop(other,lambda o:
                 Point_c25519(crypto_scalarmult_base(o)))
-    generator=_generator_c25519(_generator_c25519 .__mul__(None,1))
+    generator=_generator_c25519(b"\t"+b"\0"*31)
     Point=Point_c25519
     order=Scalar.order
     name='Curve25519'
@@ -185,16 +235,15 @@ class Curve25519():
     def encode_scalar_25519(cls,s):
         assert isinstance(s, Scalar)
         return bytes(s)
-    @classmethod
-    def decode_scalar_25519(cls,data):
-        assert isinstance(data, bytes)
-        return Scalar(data)
+    decode_scalar_25519=Scalar.decode_scalar_25519
 
 class Ed25519(Curve25519):
+    zero_point=Point_ed25519(b'\x01'+b'\0'*31)
     class _generator_ed25519(Point_ed25519):
         def __repr__(self):
             return "%s(%r)"%(Point_ed25519.__name__,self.bytes)
         def __mul__(self,other):
+            if other == Scalar.zero:return Ed25519.zero_point
             return Scalar._tryop(other,lambda o:
                 Point_ed25519(crypto_scalarmult_ed25519_base_noclamp(o)))
     generator=_generator_ed25519(_generator_ed25519.__mul__(None,1))
@@ -243,7 +292,53 @@ class TestC25519(unittest.TestCase):
     #TODO:add unit tests for curves
 
 if __name__=="__main__":
+    from ecpy.curves import Curve
+    cv=Curve.get_curve("Curve25519")
+    import math
+    print(hex(cv.order))
+    a=int_decode(bytes(Scalar.decode_scalar_25519(b"\xff"*32)))
+    print(hex(int(a/8.0)))
+    print(hex(int_decode(bytes(Scalar(1)/2))))
+    print(hex(int_decode(bytes(Scalar(1)/4))))
+    print(hex(int_decode(bytes(Scalar(1)/8))))
+    from nacl import _sodium
+    
+    
+    
+    sk=nacl.public.PrivateKey.generate()
+    pk=sk.public_key
+    
+    print(cv.encode_point(cv.generator))
+    print(Curve25519.generator)
+    
+    
+    sk_scalar=Scalar(sk)
+    pk_point=Curve25519.Point(pk)
+    target=Curve25519.generator*sk_scalar
+    import nacl.bindings
+    print(sk_scalar)
+    print(Scalar(sk_scalar.bytes))
+    print(pk_point)
+    print(Curve25519.Point(nacl.bindings.crypto_scalarmult_base(sk.encode())))
+    print(Curve25519.Point(nacl.bindings.crypto_scalarmult_base(sk_scalar.bytes)))
+    print(target)
+    assert target==pk_point
+    
+    exit()
+    sk=nacl.signing.SigningKey.generate()
+    pk=sk.verify_key
+    
+    sk_scalar=Scalar(sk)
+    pk_point=Ed25519.Point(pk)
+    target=Ed25519.generator*sk_scalar
+    print(sk_scalar)
+    print(pk_point)
+    print(target)
+    assert target==pk_point
+    
     unittest.main()
+    
+    
 
 
 

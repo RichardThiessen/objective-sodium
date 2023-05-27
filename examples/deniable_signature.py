@@ -1,11 +1,10 @@
 
 
 from nacl.signing import SigningKey
-from nacl import bindings
 import json
 import io
 
-from objective_sodium import Scalar,Ed25519 as cv, int_encode, int_decode
+from objective_sodium import  Scalar,Ed25519 as cv, int_encode, int_decode
 
 
 import hashlib
@@ -14,8 +13,8 @@ def sha512(m):return hashlib.sha512(m).digest()
 def h_int(m):return Scalar.from_long_bytes(sha512(m))
 
 
-def verify(sig,pk):
-    "verifies an Ed25519 signature, same as the usual NACL signing API"
+def verify(sig,pk,m):
+    #verify an Ed25519 signature
     assert len(sig)==64
     R = cv.Point(sig[0:32])
     A = cv.Point(pk)
@@ -24,22 +23,18 @@ def verify(sig,pk):
     return cv.generator*s == R+A*h
 
 def ed25519_key_scalar(sk):
-    "calculates the scalar for a SigningKey object."
     return cv.decode_scalar_25519(sha512(sk.encode())[:32])
 
 def make_proof(sig,challenge_key,m,context=b"",detached=False):
-    """
-    generates a proof a given signature exists proven to the owner of challenge_key
-    This is basically a diffie-hellman key exchange using scalar `s` in the signature as a key
-    """
     R=sig[0:32]
+    PKc = cv.Point(challenge_key)
     s = Scalar(sig[32:])
-    #DH shared secret
-    K = s * cv.Point(challenge_key)
+    K = s * PKc
     H = sha512(bytes(K)+context)[:32]
     proof = (R+H+
              int_encode(len(context), 4)+context+
              ((int_encode(len(m), 4)+m) if not detached else b""))
+    for i in locals().items():print("%s:\t%r"%i)
     return proof
 
 def check_proof(proof,challenge_sk,pk,m=None):
