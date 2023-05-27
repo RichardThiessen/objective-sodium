@@ -1,11 +1,14 @@
 
 from os import urandom
 from nacl.signing import SigningKey,VerifyKey
-import hashlib
-import warnings
 
-from objective_sodium import Ed25519 as cv, Scalar, int_encode, int_decode
-from pprint import pprint
+from objective_sodium import Ed25519 as cv, Scalar
+
+from example_utils import (
+    byte_xor,
+    H_P2B,
+    hash_to_scalar,
+    ed25519_key_scalar)
 
 """
 This module implements a chameleon hash function, a hash function with a
@@ -25,19 +28,6 @@ raw functions don't do that
 wrapm
 
 """
-
-def byte_xor(a,b):
-    assert len(a)==len(b)
-    return bytes(a^b for a,b in zip(*map(bytearray,(a,b))))
-
-def sha512(priv_key):return hashlib.sha512(priv_key).digest()
-def H_P2B(P,n=None):
-    if n>64:raise ValueError("can't supply more than 64 bytes (this uses sha512)")
-    return sha512(cv.encode_point(P))[:n]
-def Hash_to_scalar(B):return Scalar.from_long_bytes(sha512(B))
-
-def ed25519_key_scalar(sk):
-    return cv.decode_scalar_25519(sha512(sk.encode())[:32])
 
 class VerifyError(ValueError):pass
 
@@ -61,7 +51,7 @@ def chameleon_raw(Y,m,r=None):
     #when generating reduce 64 bytes for uniform s distribution
     r=bytes(s)+t #re-pack everything
     #do the hash
-    e=Hash_to_scalar(m+t)
+    e=hash_to_scalar(m+t)
     R=e*cv.decode_point(Y)+s*cv.generator
     h=byte_xor(t, H_P2B(R,32))
     return h,r
@@ -82,11 +72,11 @@ def forge(priv_key,m,H,salt=b""):
     assert len(h)==32
 
     #ephemeral secret `k` is always derived securely from parameters
-    k=Hash_to_scalar(priv_key.encode()+m+h+salt+b"chameleon_raw hash forge secret")
+    k=hash_to_scalar(priv_key.encode()+m+h+salt+b"chameleon_raw hash forge secret")
     x=ed25519_key_scalar(priv_key)
     R=k*cv.generator
     t=byte_xor(h, H_P2B(R,32))
-    e=Hash_to_scalar(m+t)
+    e=hash_to_scalar(m+t)
     s=k-e*x
     r=bytes(s)+t
     return r
@@ -133,16 +123,3 @@ if __name__=="__main__":
         forge(priv_key2, m2, H) #forge with wrapped hash checks against Y in wrapped hash
         raise Exception("wrong privkey should be detected")
     except ValueError:pass
-    
-    
-    
-    
-    
-
-
-    
-
-
-
-
-

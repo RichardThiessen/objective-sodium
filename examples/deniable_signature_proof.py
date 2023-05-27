@@ -14,7 +14,7 @@ def sha512(m):return hashlib.sha512(m).digest()
 def h_int(m):return Scalar.from_long_bytes(sha512(m))
 
 
-def verify(sig,pk):
+def verify(sig,pk,m):
     "verifies an Ed25519 signature, same as the usual NACL signing API"
     assert len(sig)==64
     R = cv.Point(sig[0:32])
@@ -27,7 +27,7 @@ def ed25519_key_scalar(sk):
     "calculates the scalar for a SigningKey object."
     return cv.decode_scalar_25519(sha512(sk.encode())[:32])
 
-def make_proof(sig,challenge_key,m,context=b"",detached=False):
+def prove_signature_exists(sig,challenge_key,m,context=b"",detached=False):
     """
     generates a proof a given signature exists proven to the owner of challenge_key
     This is basically a diffie-hellman key exchange using scalar `s` in the signature as a key
@@ -85,14 +85,13 @@ if __name__=="__main__":
     bob_sk=SigningKey((b"bob"*100)[:32])
     bob_pk=bob_sk.verify_key.encode()
     
-    print("Bob --> Alice: challenge key:",repr(bob_pk))
+    print("Bob --> Alice: challenge key:\n",repr(bob_pk))
     #Alice makes a proof
-    proof=make_proof(sig=alice_ID["sig"], challenge_key=bob_pk, m=alice_ID["info"],
+    proof=prove_signature_exists(sig=alice_ID["sig"], challenge_key=bob_pk, m=alice_ID["info"],
                      context=json.dumps({"prover":"Alice","verifier":"Bob","date":"2023-01-01T01:02:59Z"}).encode())
-    print("Alice --> Bob: proof:",repr(proof))
-    
+    print("Alice --> Bob: proof:\n",repr(proof))
     
     #bob can verify it
     result=check_proof(proof, bob_sk, gov_pk)
-    print("Bob knows the following was signed:",result[1])
-    print("with protocol context:",result[0])
+    print("Bob knows the following was signed:\n",result[1])
+    print("with protocol context:\n",result[0])

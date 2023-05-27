@@ -1,29 +1,33 @@
 
 
 from nacl.signing import SigningKey
-import json
-import io
 from os import urandom
 
-from objective_sodium import  Scalar,Ed25519 as cv, int_encode, int_decode
+from objective_sodium import  Scalar,Ed25519 as cv
 
-import hashlib
+from example_utils import (
+    sha512,
+    hash_to_scalar,
+    ed25519_key_scalar)
+
 from hmac import compare_digest
-def sha512(m):return hashlib.sha512(m).digest()
-def h_int(m):return Scalar.from_long_bytes(sha512(m))
 
-def ed25519_key_scalar(sk):
-    "calculates the scalar for a SigningKey object."
-    return cv.decode_scalar_25519(sha512(sk.encode())[:32])
 
 def hash_to_curve(seed):
+    """maps a seed to a pseudorandomly chosen curve point
+    the resulting point has an unknown discrete log
+    
+    for any H=hash_to_curve(b"some bytes")
+    equations of the form (a*G+b*H=0) are not solvable without solving the
+    discrete log problem
+    """
     for i in range(2**32):
         h=sha512(seed+i.to_bytes(4,"little"))[:32]
         P=cv.decode_point(h)
         if P.is_on_curve():return P
 
+#independent generator for Pedersen commitments
 H_generator=hash_to_curve(cv.encode_point(cv.generator))
-
 
 
 def commit(x,r=None):
@@ -32,21 +36,19 @@ def commit(x,r=None):
     if r is None:r=Scalar(urandom(32))
     return cv.generator*x+r*H_generator,r
 
-
-
 def Prove_challenge_is_zero_deniable(r,challenge_key,context=b""):
     """proves to the holder of a challenge key:
-    that a pedersen commitment C opens to 0"""
+    that a Pedersen commitment C opens to 0"""
     #derive pseudorandom values
     seed=sha512(bytes(r)+bytes(challenge_key)+context)
-    k =h_int(seed+b"k")
-    s2=h_int(seed+b"s2")
+    k =hash_to_scalar(seed+b"k")
+    s2=hash_to_scalar(seed+b"s2")
     #assemble the ring
     C=r*H_generator
     R1=H_generator*k
-    e2=h_int(bytes(R1)+bytes(C))
+    e2=hash_to_scalar(bytes(R1)+bytes(C))
     R2=cv.decode_point(challenge_key)*e2+s2*cv.generator
-    e1=h_int(bytes(R2))#challenge key can be malleable
+    e1=hash_to_scalar(bytes(R2))#challenge key can be malleable
     s1=k-e1*r
     #now derive the ECDH key
     K = s2 * cv.Point(challenge_key)
@@ -66,9 +68,9 @@ def check_challenge_is_zero_deniable(proof,challenge_sk,C):
     #unpack challenge_sk
     challenge_sk=ed25519_key_scalar(challenge_sk)
     #traverse the ring to find S1
-    e1=h_int(bytes(R2))
+    e1=hash_to_scalar(bytes(R2))
     R1=cv.decode_point(C)*e1+s1*H_generator
-    e2=h_int(bytes(R1)+bytes(C))
+    e2=hash_to_scalar(bytes(R1)+bytes(C))
     S1=R2-cv.generator*(challenge_sk*e2)
     #derive ECDH key
     K = S1 * challenge_sk
@@ -79,7 +81,7 @@ def check_challenge_is_zero_deniable(proof,challenge_sk,C):
 
 def prove_opening_deniable(x,r,challenge_key,context=b""):
     """proves to the holder of a challenge key:
-    that a pedersen commitment C opens to x"""
+    that a Pedersen commitment C opens to x"""
     zero_proof=Prove_challenge_is_zero_deniable(r, challenge_key, context)
     return bytes(Scalar(x))+zero_proof
 
@@ -93,8 +95,8 @@ def check_opening_deniable(proof,challenge_sk,C):
 
 if __name__=="__main__":
 
-    #bob has a known key or generates an ephemeral challenge key for the protocol.
-    bob_sk=SigningKey((b"bob"*100)[:32])
+    #Bob has a known key or generates an ephemeral challenge key for the protocol.
+    bob_sk=SigningKey((b"Bob"*100)[:32])
     bob_pk=bob_sk.verify_key.encode()
     
     #Alice makes a proof
@@ -113,4 +115,4 @@ if __name__=="__main__":
     
     #Bob checks the proof
     result=check_opening_deniable(proof, bob_sk, C)
-    print("Bob knows the following commitment opens to %r:\n"%int_decode(bytes(result[1])),C)
+    print("Bob knows the following commitment opens to %r:\n"%int(result[1]),C)

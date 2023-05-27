@@ -83,6 +83,7 @@ class Scalar():
     def __repr__(self):
         return "%s(%s)"%(self.__class__.__name__,hex(int_decode(self.bytes)))
     def __bytes__(self):return self.bytes
+    def __int__(self):return int_decode(self.bytes)
     #helpers for operations
     @classmethod
     def _tryop(cls,other,f):
@@ -185,8 +186,8 @@ class Point_ed25519(Point_c25519):
         if isinstance(x, nacl.signing.VerifyKey):
             x=x.encode()
         self.bytes=bytes(x)
-        if not self.is_on_curve():
-            raise ValueError("point is not on curve")
+#         if not self.is_on_curve():
+#             raise ValueError("point is not on curve")
         assert len(self.bytes)==self.ed25519_BYTES
     #add/sub implemented for ed25519
     def __add__(self,other):
