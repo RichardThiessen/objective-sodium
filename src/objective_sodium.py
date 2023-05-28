@@ -47,6 +47,10 @@ class Scalar():
     - integer
     - nacl.signing.SigningKey
     - nacl.public.PrivateKey
+    
+    Can be converted to:
+    - int_s  =int(  scalar_s)
+    - bytes_s=bytes(scalar_s)
     """
     SCALARBYTES=crypto_core_ed25519_SCALARBYTES
     NONREDUCEDSCALARBYTES=crypto_core_ed25519_NONREDUCEDSCALARBYTES
@@ -141,7 +145,13 @@ Scalar.zero=Scalar(0)
 
 
 class Point_c25519():
-    "represents a curve25519 point"
+    """
+    represents a curve25519 point
+    
+    Can be contructed from:
+    - 32 byte string
+    - nacl.public.PublicKey
+    """
     ed25519_BYTES=crypto_core_ed25519_BYTES
     @classmethod
     def decode_point(cls,data):
@@ -180,7 +190,13 @@ class Point_c25519():
         return compare_digest(self.bytes,other.bytes)
 
 class Point_ed25519(Point_c25519):
-    "represents an ed25519 curve point"
+    """
+    represents an ed25519 curve point"
+       
+    Can be contructed from:
+    - 32 byte string
+    - nacl.signing.VerifyKey
+    """
     def is_on_curve(self):return crypto_core_ed25519_is_valid_point(self.bytes)
     def __init__(self,x):
         if isinstance(x, nacl.signing.VerifyKey):
@@ -283,7 +299,7 @@ class TestScalar(unittest.TestCase):
                         self.assertEqual(Scorrect, f( a,Sb),(fname,a,b))
     def test_init(self):
         #check scalar reduction can be caught but works otherwise
-        for v in [Scalar.order,int_encode(Scalar.order, 32),-Scalar.order]: 
+        for v in [Scalar.order,int_encode(Scalar.order, 32),-Scalar.order,-1]: 
             with self.assertRaises(ValueError):
                 Scalar(v,allow_nonreduced=False)
             self.assertEqual(Scalar(Scalar.order),0)
@@ -293,50 +309,6 @@ class TestC25519(unittest.TestCase):
     #TODO:add unit tests for curves
 
 if __name__=="__main__":
-    from ecpy.curves import Curve
-    cv=Curve.get_curve("Curve25519")
-    import math
-    print(hex(cv.order))
-    a=int_decode(bytes(Scalar.decode_scalar_25519(b"\xff"*32)))
-    print(hex(int(a/8.0)))
-    print(hex(int_decode(bytes(Scalar(1)/2))))
-    print(hex(int_decode(bytes(Scalar(1)/4))))
-    print(hex(int_decode(bytes(Scalar(1)/8))))
-    from nacl import _sodium
-    
-    
-    
-    sk=nacl.public.PrivateKey.generate()
-    pk=sk.public_key
-    
-    print(cv.encode_point(cv.generator))
-    print(Curve25519.generator)
-    
-    
-    sk_scalar=Scalar(sk)
-    pk_point=Curve25519.Point(pk)
-    target=Curve25519.generator*sk_scalar
-    import nacl.bindings
-    print(sk_scalar)
-    print(Scalar(sk_scalar.bytes))
-    print(pk_point)
-    print(Curve25519.Point(nacl.bindings.crypto_scalarmult_base(sk.encode())))
-    print(Curve25519.Point(nacl.bindings.crypto_scalarmult_base(sk_scalar.bytes)))
-    print(target)
-    assert target==pk_point
-    
-    exit()
-    sk=nacl.signing.SigningKey.generate()
-    pk=sk.verify_key
-    
-    sk_scalar=Scalar(sk)
-    pk_point=Ed25519.Point(pk)
-    target=Ed25519.generator*sk_scalar
-    print(sk_scalar)
-    print(pk_point)
-    print(target)
-    assert target==pk_point
-    
     unittest.main()
     
     

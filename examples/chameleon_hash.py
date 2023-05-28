@@ -25,8 +25,6 @@ finding preimages.
 note:
 default functions bundle public key with the hash for ease of use.
 raw functions don't do that
-wrapm
-
 """
 
 class VerifyError(ValueError):pass
