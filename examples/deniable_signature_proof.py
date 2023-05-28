@@ -7,11 +7,9 @@ import io
 
 from objective_sodium import Scalar,Ed25519 as cv, int_encode, int_decode
 
+from _example_utils import sha512,hash_to_scalar
 
-import hashlib
 from hmac import compare_digest
-def sha512(m):return hashlib.sha512(m).digest()
-def h_int(m):return Scalar.from_long_bytes(sha512(m))
 
 
 def verify(sig,pk,m):
@@ -58,7 +56,7 @@ def check_proof(proof,challenge_sk,pk,m=None):
     
     #calculate S from signature equation
     A = cv.decode_point(pk)
-    h = h_int(cv.encode_point(R) + pk + m)
+    h = hash_to_scalar(cv.encode_point(R) + pk + m)
     S = R+A*h
     #check the DH shared key sha512 was correctly calculated
     K=cv.encode_point( S * ed25519_key_scalar(challenge_sk))

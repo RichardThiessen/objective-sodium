@@ -4,7 +4,7 @@ from nacl.signing import SigningKey,VerifyKey
 
 from objective_sodium import Ed25519 as cv, Scalar
 
-from example_utils import (
+from _example_utils import (
     byte_xor,
     H_P2B,
     hash_to_scalar,
